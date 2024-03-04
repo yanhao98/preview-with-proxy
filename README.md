@@ -1,4 +1,4 @@
-# build-and-zip
+# build-and-preview
 
 ## install
 ```bash
