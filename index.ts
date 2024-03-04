@@ -128,7 +128,7 @@ function runDev() {
     if (devProcess) {
         devProcess.kill()
     }
-    log(chalk.cyan(`运行开发脚本：npm run ${argv['dev-script']}`))
+    log(chalk.cyan(`运行开发脚本：npm run ${chalk.bold(argv['dev-script'])}`))
     devProcess = spawn(`npm run ${argv['dev-script']}`, {
         shell: true,
         stdio: 'inherit'
