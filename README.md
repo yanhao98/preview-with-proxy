@@ -1,7 +1,7 @@
 # build-and-preview
 
 ## install
-```bash
+```shell
 pnpm add @yanhao98/build-and-preview -D
 ```
 
@@ -12,7 +12,13 @@ package.json
   "name": "project-name",
   "scripts": {
     "build": "your-build-script",
-    "build-and-preview": "build-and-preview --port 3000 --build-script build",
+    "build-and-preview": "build-and-preview --port 3000 --build-script build --dev-script=dev",
   }
 }
 ```
+
+.env.local
+``` shell
+VITE_PROXY=[['/api','https://your-api-server.com']]
+```
+

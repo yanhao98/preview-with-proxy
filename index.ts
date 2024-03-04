@@ -9,16 +9,15 @@ type BuildProcess = import("node:child_process").ChildProcessByStdio<null, impor
 
 let previewServer: PreviewServer | null = null
 let buildProcess: BuildProcess | null = null
+let devProcess: import("node:child_process").ChildProcess | null = null
 
 // 构建完成时的输出
 const BUILD_DONE_OUTPUT = [
     'Build complete. The dist directory is ready to be deployed.'
 ]
-// // 开始重新构建时的输出
-// const REBUILD_START_OUTPUT = 'WAIT  Compiling...'
 
 const log = function (...args: any[]) {
-    console.log(`[${new Date().toLocaleTimeString()}] [build-preview: ${argv.port}]`, ...args)
+    console.log(`${chalk.dim(`[${new Date().toLocaleTimeString()}] [build-preview: ${argv.port}]`)}`, ...args)
 }
 const argv = yargs()
     .option('port', {
@@ -44,6 +43,10 @@ const argv = yargs()
         default: 'VITE_PROXY',
         type: 'string'
     })
+    .option('dev-script', {
+        describe: '开发脚本（在 package.json 中的 scripts 字段），如果提供则在启动预览服务时执行',
+        type: 'string',
+    })
     .check((argv) => {
         // 检查 build-command 和 build-script 至少有一个被提供
         if (!argv['build-command'] && !argv['build-script']) {
@@ -54,17 +57,17 @@ const argv = yargs()
     })
     .parseSync(process.argv)
 
-function build() {
+function runBuild() {
     if (buildProcess) {
         buildProcess.kill()
     }
 
     const command = (
-        !!argv.buildScript
-            ? `npm run ${argv.buildScript}`
-            : argv.buildCommand
+        !!argv['build-script']
+            ? `npm run ${argv['build-script']}`
+            : argv['build-command']
     ) as string
-    log(chalk.cyan(`开始构建。构建命令：${chalk.bold(command)}`))
+    log(chalk.cyan(`开始构建预览资产。构建命令：${chalk.bold(command)}`))
 
     const [cmd, ...args] = command.split(' ')
     buildProcess = spawn(cmd, args, {
@@ -74,11 +77,9 @@ function build() {
     buildProcess.stdout.on('data', (data) => {
         const output = data.toString()
         // process.stdout.write(data)
-        /* if (output.includes(REBUILD_START_OUTPUT)) {
-            log(chalk.cyan('监听到重新构建...'))
-        } else */ if (BUILD_DONE_OUTPUT.some((item) => output.includes(item))) {
-            log(chalk.green(`构建完成。${chalk.bold('按 R 重新构建')}，${chalk.bold('Ctrl+C 退出')}。`))
-            startPreview()
+        if (BUILD_DONE_OUTPUT.some((item) => output.includes(item))) {
+            log(chalk.green(`预览服务已启动，${chalk.bold('按 R 重新构建预览资产')}，${chalk.bold('按 D 重新运行开发脚本')}，${chalk.bold('Ctrl+C 退出')}。`))
+            runPreview()
         }
     })
     buildProcess.on('exit', (code) => {
@@ -86,7 +87,7 @@ function build() {
     })
 }
 
-function startPreview() {
+function runPreview() {
     // https://vitejs.dev/guide/api-javascript.html#preview
     (async () => {
         if (previewServer) await previewServer.close()
@@ -95,8 +96,13 @@ function startPreview() {
     (async () => {
         const env = loadEnv(argv['proxy-env-mode'], process.cwd(), [argv['proxy-env-key']])
         const proxy = createViteProxy(env.VITE_PROXY);
-        for (const [path, target] of Object.entries(proxy)) {
-            log(chalk.green(`代理：${path} -> ${target.target}`))
+
+        if (Object.keys(proxy).length === 0) {
+            log(chalk.yellow('未提供代理配置'))
+        } else {
+            for (const [path, target] of Object.entries(proxy)) {
+                log(chalk.green(`预览服务代理：${path} -> ${target.target}`))
+            }
         }
         try {
             previewServer = await preview({
@@ -117,20 +123,50 @@ function startPreview() {
     })();
 }
 
-if (argv.buildCommand || argv.buildScript) {
-    // 设置 stdin 监听按键事件 // 一些库：// inquirer // keypress // blessed
+
+function runDev() {
+    if (devProcess) {
+        devProcess.kill()
+    }
+    devProcess = spawn(`npm run ${argv['dev-script']}`, {
+        shell: true,
+        stdio: 'inherit'
+    });
+    devProcess.on('exit', (code) => {
+        log(chalk.gray(`开发进程退出，退出码：${code}`))
+    });
+}
+
+function setupKeyBindings() {
     readline.emitKeypressEvents(process.stdin);
     if (process.stdin.isTTY) process.stdin.setRawMode(true);
+
     process.stdin.on('keypress', (chunk, key) => {
         if (key && key.name === 'r') {
-            // console.log('\x1Bc'); // 清屏
-            log(chalk.blue('检测到按键 R，重新开始构建...'));
-            build();
+            log(chalk.blue('检测到按键 R，重新运行构建脚本...'));
+            runBuild();
+        } else if (key && key.name === 'd') {
+            log(chalk.blue('检测到按键 D，重新运行开发脚本...'));
+            runDev();
         } else if (key && key.ctrl && key.name === 'c') {
-            process.exit(); // 监听 Ctrl+C 退出程序
+            log(chalk.red('检测到按键 Ctrl+C，退出...'));
+            (async () => {
+                if (previewServer) await previewServer.close()
+                // log(chalk.gray('预览服务已关闭'))
+                if (buildProcess) buildProcess.kill()
+                // log(chalk.gray('构建进程已关闭'))
+                if (devProcess) devProcess.kill()
+                // log(chalk.gray('开发进程已关闭'))
+                process.exit(0);
+            })();
         }
     });
-    build()
-} else {
-    startPreview()
 }
+
+runBuild()
+
+if (argv['dev-script']) {
+    runDev()
+}
+
+setupKeyBindings()
