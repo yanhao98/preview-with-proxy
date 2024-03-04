@@ -1,7 +1,7 @@
 {
   "name": "@yanhao98/build-and-preview",
   "description": "Build and preview your project with a single command",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "scripts": {
     "build": "bun build ./index.ts --outfile ./index.mjs --format esm --target node --external yargs --external vite --external chalk",
     "build:watch": "bun run build -- --watch",
