@@ -11,3 +11,6 @@ VITE_PREVIEW_BUILD_SCRIPT=build-only
 ```bash
 bunx dev-and-preview
 ```
+
+---
+- https://github.com/bahmutov/start-server-and-test
